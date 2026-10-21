@@ -1,0 +1,165 @@
+
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  background: #fffef9;
+  font-family: 'DM Sans', sans-serif;
+  color: #193d2c;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 460px;
+  box-sizing: border-box;
+  padding: 36px;
+  background: white;
+  border: 1px solid #e4eadf;
+  border-radius: 20px;
+  box-shadow: 0 12px 40px rgba(25, 61, 44, 0.08);
+}
+
+.auth-brand {
+  display: inline-block;
+  margin-bottom: 30px;
+  color: #246b45;
+  font-size: 25px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.auth-eyebrow {
+  color: #568363;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 2px;
+}
+
+.auth-card h1 {
+  font-size: 30px;
+  line-height: 1.25;
+}
+
+.auth-subtitle {
+  margin-bottom: 26px;
+  color: #68776d;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.auth-card form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.auth-card label {
+  margin-top: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.auth-card input,
+.auth-card select {
+  width: 100%;
+  min-height: 46px;
+  box-sizing: border-box;
+  padding: 12px 13px;
+  border: 1px solid #d7e0d6;
+  border-radius: 9px;
+  background: white;
+  color: #193d2c;
+  font: inherit;
+}
+
+.auth-card input:focus,
+.auth-card select:focus {
+  outline: 2px solid #83b894;
+  outline-offset: 1px;
+}
+
+.auth-button {
+  min-height: 48px;
+  margin-top: 14px;
+  border: 0;
+  border-radius: 9px;
+  background: #246b45;
+  color: white;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.auth-button:hover {
+  background: #194f33;
+}
+
+.auth-button:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.auth-error {
+  color: #b42318;
+  font-size: 13px;
+}
+
+.auth-switch {
+  margin-top: 24px;
+  text-align: center;
+  color: #68776d;
+  font-size: 14px;
+}
+
+.auth-switch a,
+.auth-home {
+  color: #246b45;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.auth-home {
+  display: block;
+  margin-top: 18px;
+  text-align: center;
+  font-size: 13px;
+}
+
+@media (max-width: 480px) {
+  .auth-card {
+    padding: 25px 20px;
+  }
+
+  .auth-card h1 {
+    font-size: 26px;
+  }
+}
+/* Forgot Password link */
+.forgot-password-row {
+  display: flex;
+  justify-content: flex-end;
+  margin: 8px 0 16px;
+}
+
+.forgot-password-row a {
+  color: #315c40;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.forgot-password-row a:hover {
+  color: #24462f;
+}
+
+/* Success message for password reset */
+.auth-success {
+  padding: 12px;
+  color: #285b37;
+  background: #edf7ec;
+  border-radius: 8px;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
