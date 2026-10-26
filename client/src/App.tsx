@@ -1,6 +1,7 @@
-
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import socket from './socket'
+import LocationPicker, { type SelectedLocation } from './components/LocationPicker'
 import './style.css'
 
 type Donation = {
@@ -14,6 +15,8 @@ type Donation = {
   phone: string
   details: string
   donor: string
+  latitude: number | null
+  longitude: number | null
 }
 
 type StoredUser = {
@@ -38,9 +41,34 @@ function getAuthHeaders(): HeadersInit {
 function getStoredUser(): StoredUser | null {
   try {
     const user = localStorage.getItem('foodshare-user')
-    return user ? JSON.parse(user) as StoredUser : null
+    return user ? (JSON.parse(user) as StoredUser) : null
   } catch {
     return null
+  }
+}
+
+function mapDonation(item: any): Donation {
+  return {
+    id: String(item._id ?? item.id ?? ''),
+    foodName: item.foodName ?? '',
+    quantity: String(item.quantity ?? ''),
+    unit: item.unit ?? '',
+    foodType: item.foodType ?? '',
+    bestBefore: item.bestBefore
+      ? String(item.bestBefore).slice(0, 10)
+      : '',
+    location: item.location ?? '',
+    phone: item.phone ?? '',
+    details: item.details ?? '',
+    donor: String(
+      item.donor?._id ??
+        item.donor ??
+        item.user?._id ??
+        item.user ??
+        ''
+    ),
+    latitude: typeof item.latitude === 'number' ? item.latitude : null,
+    longitude: typeof item.longitude === 'number' ? item.longitude : null,
   }
 }
 
@@ -73,6 +101,8 @@ function App() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [selectedLocation, setSelectedLocation] =
+    useState<SelectedLocation | null>(null)
   const [user, setUser] = useState<StoredUser | null>(() => getStoredUser())
 
   const token = localStorage.getItem('foodshare-token')
@@ -80,9 +110,31 @@ function App() {
   const currentUserId = user?.id || user?._id || ''
 
   useEffect(() => {
+    let active = true
+
     async function loadDonations() {
+      const savedToken = localStorage.getItem('foodshare-token')
+
+      if (!savedToken) {
+        if (active) {
+          setDonations([])
+          setLoading(false)
+        }
+        return
+      }
+
       try {
-        const response = await fetch(API_URL)
+        const response = await fetch(API_URL, {
+          headers: { Authorization: `Bearer ${savedToken}` },
+        })
+
+        if (response.status === 401) {
+          if (active) {
+            setDonations([])
+            setLoading(false)
+          }
+          return
+        }
 
         if (!response.ok) {
           throw new Error('Could not load donations.')
@@ -94,39 +146,30 @@ function App() {
           throw new Error('Invalid donations response from server.')
         }
 
-        setDonations(
-          data.map((item: any) => ({
-            id: String(item._id ?? item.id ?? ''),
-            foodName: item.foodName ?? '',
-            quantity: String(item.quantity ?? ''),
-            unit: item.unit ?? '',
-            foodType: item.foodType ?? '',
-            bestBefore: item.bestBefore
-              ? String(item.bestBefore).slice(0, 10)
-              : '',
-            location: item.location ?? '',
-            phone: item.phone ?? '',
-            details: item.details ?? '',
-            donor: String(
-              item.donor?._id ??
-              item.donor ??
-              item.user?._id ??
-              item.user ??
-              ''
-            ),
-          })).filter((item: Donation) => item.id !== '')
-        )
+        if (active) {
+          setDonations(
+            data.map(mapDonation).filter((item: Donation) => item.id !== '')
+          )
+        }
       } catch (err) {
         console.error('Load donations error:', err)
-        setError(
-          'Donations load nahi hui. Check karo ki backend port 5000 par chal raha hai.'
-        )
       } finally {
-        setLoading(false)
+        if (active) setLoading(false)
       }
     }
 
-    loadDonations()
+    void loadDonations()
+
+    const handleDonationsUpdated = () => {
+      void loadDonations()
+    }
+
+    socket.on('donations:updated', handleDonationsUpdated)
+
+    return () => {
+      active = false
+      socket.off('donations:updated', handleDonationsUpdated)
+    }
   }, [])
 
   function requireLogin() {
@@ -135,7 +178,6 @@ function App() {
       navigate('/login')
       return false
     }
-
     return true
   }
 
@@ -145,6 +187,11 @@ function App() {
     setSuccess('')
 
     if (!requireLogin()) return
+
+    if (!selectedLocation) {
+      setError('Please select the pickup location on the map.')
+      return
+    }
 
     setSubmitting(true)
 
@@ -158,6 +205,8 @@ function App() {
       foodType: String(formData.get('foodType') || ''),
       bestBefore: String(formData.get('bestBefore') || ''),
       location: String(formData.get('location') || '').trim(),
+      latitude: selectedLocation.latitude,
+      longitude: selectedLocation.longitude,
       phone: String(formData.get('phone') || '').trim(),
       details: String(formData.get('details') || '').trim(),
     }
@@ -182,37 +231,24 @@ function App() {
         throw new Error(result.message || 'Donation submit nahi hui.')
       }
 
-      const saved: Donation = {
-        id: String(result._id ?? result.id ?? ''),
-        foodName: result.foodName ?? payload.foodName,
-        quantity: String(result.quantity ?? payload.quantity),
-        unit: result.unit ?? payload.unit,
-        foodType: result.foodType ?? payload.foodType,
-        bestBefore: result.bestBefore
-          ? String(result.bestBefore).slice(0, 10)
-          : payload.bestBefore,
-        location: result.location ?? payload.location,
-        phone: result.phone ?? payload.phone,
-        details: result.details ?? payload.details,
-        donor: String(
-          result.donor?._id ??
-          result.donor ??
-          currentUserId
-        ),
-      }
+      const saved = mapDonation(result)
 
       if (!saved.id) {
         throw new Error('Backend response mein donation ID nahi mili.')
       }
 
-      setDonations((previous) => [saved, ...previous])
+      setDonations((previous) => [
+        saved,
+        ...previous.filter((item) => item.id !== saved.id),
+      ])
+
       form.reset()
+      setSelectedLocation(null)
       setSuccess('Thank you! Your food donation has been added.')
+      socket.emit('donations:updated')
     } catch (err) {
       console.error('Donation submit error:', err)
-      setError(
-        err instanceof Error ? err.message : 'Donation submit nahi hui.'
-      )
+      setError(err instanceof Error ? err.message : 'Donation submit nahi hui.')
     } finally {
       setSubmitting(false)
     }
@@ -222,33 +258,23 @@ function App() {
     if (!requireLogin()) return
 
     const food = donations.find((item) => item.id === id)
-
     if (!food) return
 
-    if (
-      food.donor &&
-      currentUserId &&
-      food.donor !== currentUserId
-    ) {
+    if (food.donor && currentUserId && food.donor !== currentUserId) {
       setError('Tum sirf apni donation listing remove kar sakte ho.')
       return
     }
 
-    if (!window.confirm('Remove this donation listing?')) {
-      return
-    }
+    if (!window.confirm('Remove this donation listing?')) return
 
     setError('')
     setSuccess('')
 
     try {
-      const response = await fetch(
-        `${API_URL}/${encodeURIComponent(id)}`,
-        {
-          method: 'DELETE',
-          headers: getAuthHeaders(),
-        }
-      )
+      const response = await fetch(`${API_URL}/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      })
 
       const result = await response.json()
 
@@ -263,16 +289,12 @@ function App() {
         throw new Error(result.message || 'Delete failed.')
       }
 
-      setDonations((previous) =>
-        previous.filter((item) => item.id !== id)
-      )
-
+      setDonations((previous) => previous.filter((item) => item.id !== id))
       setSuccess('Donation listing removed successfully.')
+      socket.emit('donations:updated')
     } catch (err) {
       console.error('Delete donation error:', err)
-      setError(
-        err instanceof Error ? err.message : 'Donation delete nahi hui.'
-      )
+      setError(err instanceof Error ? err.message : 'Donation delete nahi hui.')
     }
   }
 
@@ -280,6 +302,7 @@ function App() {
     localStorage.removeItem('foodshare-token')
     localStorage.removeItem('foodshare-user')
     setUser(null)
+    setDonations([])
     setSuccess('You have been logged out successfully.')
     setError('')
   }
@@ -289,9 +312,7 @@ function App() {
       <header className="navbar">
         <a href="#home" className="brand">
           <span className="brand-icon">✳</span>
-          <span>
-            food<span className="brand-highlight">share</span>
-          </span>
+          <span>food<span className="brand-highlight">share</span></span>
         </a>
 
         <nav className="nav-links">
@@ -304,25 +325,15 @@ function App() {
         <div className="navbar-actions">
           {loggedIn ? (
             <>
-              <span className="auth-login">
-                Hi, {user?.name || 'User'}
-              </span>
-              <button
-                className="auth-register"
-                type="button"
-                onClick={handleLogout}
-              >
+              <span className="auth-login">Hi, {user?.name || 'User'}</span>
+              <button className="auth-register" type="button" onClick={handleLogout}>
                 Logout
               </button>
             </>
           ) : (
             <>
-              <Link className="auth-login" to="/login">
-                Login
-              </Link>
-              <Link className="auth-register" to="/register">
-                Register
-              </Link>
+              <Link className="auth-login" to="/login">Login</Link>
+              <Link className="auth-register" to="/register">Register</Link>
             </>
           )}
 
@@ -340,23 +351,17 @@ function App() {
               GOOD FOOD. GREATER GOOD.
             </div>
 
-            <h1>
-              A little food.
-              <br />
-              <span>A lot of hope.</span>
-            </h1>
+            <h1>A little food.<br /><span>A lot of hope.</span></h1>
 
             <p className="hero-description">
-              Every meal deserves a purpose. Help us connect
-              surplus food with people who need it, one
-              thoughtful share at a time.
+              Every meal deserves a purpose. Help us connect surplus food with
+              people who need it, one thoughtful share at a time.
             </p>
 
             <div className="hero-actions">
               <a className="button button-primary" href="#donate-food">
                 Donate Food <span>↗</span>
               </a>
-
               <a className="button button-secondary" href="#mission">
                 Discover our mission <span>→</span>
               </a>
@@ -364,15 +369,9 @@ function App() {
 
             <div className="hero-note">
               <span className="avatar-stack">
-                <span>🥬</span>
-                <span>🍎</span>
-                <span>🥕</span>
+                <span>🥬</span><span>🍎</span><span>🥕</span>
               </span>
-              <p>
-                <strong>Small actions,</strong>
-                <br />
-                meaningful change.
-              </p>
+              <p><strong>Small actions,</strong><br />meaningful change.</p>
             </div>
           </div>
 
@@ -382,7 +381,6 @@ function App() {
                 src="https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=1000&q=85"
                 alt="A fresh, colourful bowl of nutritious food"
               />
-
               <div className="image-label">
                 <span className="label-icon">♡</span>
                 <div>
@@ -394,12 +392,8 @@ function App() {
 
             <div className="floating-card">
               <span className="floating-icon">🌿</span>
-              <div>
-                <strong>Every share matters</strong>
-                <p>Be part of the change</p>
-              </div>
+              <div><strong>Every share matters</strong><p>Be part of the change</p></div>
             </div>
-
             <div className="decorative-circle" />
           </div>
         </section>
@@ -409,11 +403,9 @@ function App() {
             <span className="strip-label">OUR PURPOSE</span>
             <h2>A better world starts at the table.</h2>
           </div>
-
           <p>
-            We believe good food should nourish people, not
-            end up in the bin. Together, we can build a more
-            caring and sustainable community.
+            We believe good food should nourish people, not end up in the bin.
+            Together, we can build a more caring and sustainable community.
           </p>
         </section>
 
@@ -431,7 +423,6 @@ function App() {
                   <span className="step-icon">{step.icon}</span>
                   <span className="step-number">{step.number}</span>
                 </div>
-
                 <h3>{step.title}</h3>
                 <p>{step.description}</p>
               </article>
@@ -443,16 +434,12 @@ function App() {
           <div className="donate-heading">
             <span className="eyebrow">MAKE A DIFFERENCE</span>
             <h2>Donate Food</h2>
-            <p>
-              Share your extra food and help someone in your
-              community.
-            </p>
-
+            <p>Share your extra food and help someone in your community.</p>
             <div className="donate-tip">
               <span>💡</span>
               <p>
-                Please share only safe, properly stored food.
-                Include accurate expiry and pickup details.
+                Please share only safe, properly stored food. Include accurate
+                expiry and pickup details.
               </p>
             </div>
           </div>
@@ -460,26 +447,14 @@ function App() {
           <form className="donate-form" onSubmit={handleDonation}>
             <label>
               Food Name
-              <input
-                type="text"
-                name="foodName"
-                placeholder="e.g. Fresh vegetable rice"
-                required
-              />
+              <input type="text" name="foodName" placeholder="e.g. Fresh vegetable rice" required />
             </label>
 
             <div className="form-row">
               <label>
                 Quantity
-                <input
-                  type="number"
-                  name="quantity"
-                  placeholder="e.g. 10"
-                  min="1"
-                  required
-                />
+                <input type="number" name="quantity" placeholder="e.g. 10" min="1" required />
               </label>
-
               <label>
                 Quantity Unit
                 <select name="unit" required defaultValue="">
@@ -500,9 +475,7 @@ function App() {
                 <option value="" disabled>Select food type</option>
                 <option value="Freshly prepared">Freshly prepared</option>
                 <option value="Packaged food">Packaged food</option>
-                <option value="Fruits and vegetables">
-                  Fruits and vegetables
-                </option>
+                <option value="Fruits and vegetables">Fruits and vegetables</option>
                 <option value="Bakery items">Bakery items</option>
                 <option value="Dairy">Dairy</option>
                 <option value="Other">Other</option>
@@ -529,13 +502,20 @@ function App() {
               />
             </label>
 
+            <LocationPicker
+              onLocationSelect={(location) => {
+                setSelectedLocation(location)
+                setError('')
+              }}
+            />
+
             <label>
               Contact Number
               <input
                 type="tel"
                 name="phone"
                 placeholder="Enter contact number"
-                pattern="[0-9+\-\s()]{7,20}"
+                pattern="[0-9+\\-\\s()]{7,20}"
                 title="Enter a valid contact number"
                 required
               />
@@ -550,47 +530,31 @@ function App() {
               />
             </label>
 
-
-{!loggedIn && (
-  <p className="form-error">
-    To post a donation, please{' '}
-    <Link
-      to="/login"
-      style={{
-        color: '#b42318',
-        textDecoration: 'underline',
-        fontWeight: 700,
-        cursor: 'pointer',
-        display: 'inline-block',
-        position: 'relative',
-        zIndex: 2,
-      }}
-    >
-      log in here
-    </Link>
-    .
-  </p>
-)}
-
-            {error && (
-              <p className="form-error" role="alert">
-                {error}
+            {!loggedIn && (
+              <p className="form-error">
+                To post a donation, please{' '}
+                <Link
+                  to="/login"
+                  style={{
+                    color: '#b42318',
+                    textDecoration: 'underline',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'inline-block',
+                    position: 'relative',
+                    zIndex: 2,
+                  }}
+                >
+                  log in here
+                </Link>.
               </p>
             )}
 
-            {success && (
-              <p className="form-success" role="status">
-                {success}
-              </p>
-            )}
+            {error && <p className="form-error" role="alert">{error}</p>}
+            {success && <p className="form-success" role="status">{success}</p>}
 
-            <button
-              className="button button-primary"
-              type="submit"
-              disabled={submitting}
-            >
-              {submitting ? 'Submitting...' : 'Submit Donation'}
-              <span>↗</span>
+            <button className="button button-primary" type="submit" disabled={submitting}>
+              {submitting ? 'Submitting...' : 'Submit Donation'} <span>↗</span>
             </button>
           </form>
         </section>
@@ -604,16 +568,16 @@ function App() {
 
           {loading ? (
             <div className="step-card">
-              <span className="step-icon">⏳</span>
-              <h3>Loading donations...</h3>
+              <span className="step-icon">⏳</span><h3>Loading donations...</h3>
             </div>
           ) : donations.length === 0 ? (
             <div className="step-card">
               <span className="step-icon">🍲</span>
-              <h3>No donations yet</h3>
+              <h3>No donations to display</h3>
               <p>
-                Be the first to share food! Your donation will
-                appear here after you submit the form.
+                {loggedIn
+                  ? 'No donations are available for this account yet.'
+                  : 'Log in to view donations available to your account, or share food with the community.'}
               </p>
               <a className="button button-primary" href="#donate-food">
                 Donate Food <span>↗</span>
@@ -635,33 +599,25 @@ function App() {
                     </div>
 
                     <h3>{food.foodName}</h3>
+                    <p><strong>Quantity:</strong> {food.quantity} {food.unit}</p>
+                    <p><strong>Food type:</strong> {food.foodType}</p>
+                    <p><strong>Best before:</strong> {food.bestBefore}</p>
+                    <p><strong>Pickup:</strong> {food.location}</p>
 
-                    <p>
-                      <strong>Quantity:</strong> {food.quantity} {food.unit}
-                    </p>
-
-                    <p>
-                      <strong>Food type:</strong> {food.foodType}
-                    </p>
-
-                    <p>
-                      <strong>Best before:</strong> {food.bestBefore}
-                    </p>
-
-                    <p>
-                      <strong>Pickup:</strong> {food.location}
-                    </p>
-
-                    {food.details && (
-                      <p>
-                        <strong>Details:</strong> {food.details}
-                      </p>
+                    {food.latitude !== null && food.longitude !== null && (
+                      <a
+                        className="button button-secondary"
+                        href={`https://www.openstreetmap.org/?mlat=${food.latitude}&mlon=${food.longitude}#map=16/${food.latitude}/${food.longitude}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        View pickup map
+                      </a>
                     )}
 
-                    <a
-                      className="button button-secondary"
-                      href={`tel:${food.phone}`}
-                    >
+                    {food.details && <p><strong>Details:</strong> {food.details}</p>}
+
+                    <a className="button button-secondary" href={`tel:${food.phone}`}>
                       Contact donor
                     </a>
 
@@ -681,27 +637,19 @@ function App() {
             </div>
           )}
 
-          {error && (
-            <p className="form-error" role="alert">{error}</p>
-          )}
-
-          {success && (
-            <p className="form-success" role="status">{success}</p>
-          )}
+          {error && <p className="form-error" role="alert">{error}</p>}
+          {success && <p className="form-success" role="status">{success}</p>}
         </section>
 
         <section className="join-section" id="get-started">
           <div>
-            <span className="eyebrow">
-              BE THE REASON SOMEONE SMILES
-            </span>
+            <span className="eyebrow">BE THE REASON SOMEONE SMILES</span>
             <h2>Got extra food? Share the goodness.</h2>
             <p>
-              Your small step could make a big difference in
-              someone’s day. Start with FoodShare today.
+              Your small step could make a big difference in someone’s day.
+              Start with FoodShare today.
             </p>
           </div>
-
           <a className="button button-light" href="#donate-food">
             Get involved <span>↗</span>
           </a>
@@ -711,16 +659,10 @@ function App() {
       <footer className="footer">
         <a href="#home" className="brand">
           <span className="brand-icon">✳</span>
-          <span>
-            food<span className="brand-highlight">share</span>
-          </span>
+          <span>food<span className="brand-highlight">share</span></span>
         </a>
-
         <p>Share Food. Reduce Waste. Spread Hope.</p>
-
-        <span>
-          Made with care for a better tomorrow. © 2026 FoodShare
-        </span>
+        <span>Made with care for a better tomorrow. © 2026 FoodShare</span>
       </footer>
     </div>
   )

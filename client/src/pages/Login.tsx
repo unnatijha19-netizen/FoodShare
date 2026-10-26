@@ -31,7 +31,13 @@ export default function Login() {
       localStorage.setItem('foodshare-token', data.token);
       localStorage.setItem('foodshare-user', JSON.stringify(data.user));
 
-      navigate('/');
+      if (data.user.role === 'donor') {
+  navigate('/donor-dashboard');
+} else if (data.user.role === 'ngo') {
+  navigate('/ngo-dashboard');
+} else {
+  setError('Invalid user role. Please contact support.');
+}
     } catch (err) {
       setError(
         err instanceof Error

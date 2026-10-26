@@ -5,6 +5,8 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
+import DonorDashboard from './pages/DonorDashboard';
+import NgoDashboard from './pages/NgoDashboard';
 import './style.css';
 
 createRoot(document.getElementById('app')!).render(
@@ -15,6 +17,8 @@ createRoot(document.getElementById('app')!).render(
       <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password/:token" element={<ResetPassword />} />
+      <Route path="/donor-dashboard" element={<DonorDashboard />} />
+      <Route path="/ngo-dashboard" element={<NgoDashboard />} />
     </Routes>
   </BrowserRouter>
 );

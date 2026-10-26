@@ -533,8 +533,18 @@ h3 {
 .donate-form > label,
 .donate-form > button,
 .donate-form > .form-error,
-.donate-form > .form-success {
+.donate-form > .form-success,
+.donate-form > .pickup-map-section {
   grid-column: 1 / -1;
+}
+
+.donate-form > .pickup-map-section {
+  width: 100%;
+  min-width: 0;
+}
+
+.donate-form > .pickup-map-section .leaflet-container {
+  width: 100% !important;
 }
 
 .donate-form input,
@@ -875,4 +885,32 @@ h3 {
   border-radius: 8px;
   font-size: 14px;
   overflow-wrap: anywhere;
+}
+/* ===== Pickup Location Map ===== */
+.pickup-map-section {
+  width: 100%;
+  margin-top: 20px;
+}
+
+/* ===== Bigger Pickup Map ===== */
+.pickup-map-section {
+  width: 100%;
+  max-width: 100%;
+}
+
+.pickup-map-section {
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
+.pickup-map-section .leaflet-container {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+@media (max-width: 700px) {
+  .pickup-map-section > div {
+    height: 350px !important;
+  }
 }
