@@ -31,8 +31,8 @@ type Analytics = {
   collectionRate: number;
 };
 
-const API_URL = 'http://localhost:5000/api/donations';
-const ANALYTICS_URL = 'http://localhost:5000/api/analytics';
+const API_URL = 'http://https://foodshare-backend-jymm.onrender.com/api/donations';
+const ANALYTICS_URL = 'http://https://foodshare-backend-jymm.onrender.com/api/analytics';
 
 export default function DonorDashboard() {
   const navigate = useNavigate();

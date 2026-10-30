@@ -36,7 +36,7 @@ type Coordinates = {
 
 type MapPoint = [number, number]
 
-const API_URL = 'http://localhost:5000/api/donations'
+const API_URL = 'http://https://foodshare-backend-jymm.onrender.com/api/donations'
 
 function FitMapBounds({ points }: { points: MapPoint[] }) {
   const map = useMap()

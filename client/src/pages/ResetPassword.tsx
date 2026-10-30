@@ -35,7 +35,7 @@ export default function ResetPassword() {
 
     try {
       const response = await fetch(
-        `http://localhost:5000/api/auth/reset-password/${encodeURIComponent(token)}`,
+        `http://https://foodshare-backend-jymm.onrender.com/api/auth/reset-password/${encodeURIComponent(token)}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
